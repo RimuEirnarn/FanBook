@@ -1,0 +1,345 @@
+<!doctype html>
+<html lang="en">
+
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+
+    <meta property="og:title" content="Higurashi Fan book" />
+    <meta property="og:description" content="Higurashi Fan Book (implementation of RimuEirnarn)" />
+    <meta property="og:image" content="{{ url_for('static', filename='ogimage.png') }}" />
+    
+
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.4/font/bootstrap-icons.css">
+    <link href="https://fonts.googleapis.com/css2?family=Gowun+Dodum&display=swap" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet"
+      integrity="sha384-EVSTQN3/azprG1Anm3QDgpJLIm9Nao0Yz1ztcQTwFspd3yD65VohhpuuCOmLASjC" crossorigin="anonymous">
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/js/bootstrap.bundle.min.js"
+      integrity="sha384-MrcW6ZMFYlzcLA8Nl+NtUVF0sA7MsXsP1UyJoMp4YLEuNSfAP+JcXn/tWtIaxVXM"
+      crossorigin="anonymous"></script>
+
+    <title>Higurashi Fan Book</title>
+    <!-- base api: http://spartacodingclub.shop/sparta_api/weather/seoul -->
+    <!-- 
+      i can guess /hinamizawa is not available, fallback to Tokyo. if not, fallback to /seoul
+  -->
+    <script defer>
+      var sanitizeHTML = function (str) {
+        return str.replace(/[^\w. ]/gi, function (c) {
+          return '&#' + c.charCodeAt(0) + ';';
+        });
+      };
+      /**
+       * Put requested data to reserved element
+       * @param {string} data
+       */
+      function _put_req_data(data) {
+        $("#weather").text(data)
+      }
+      /**
+       * Get requested data and city name.
+       * @param {string} city name
+       * @param {string} temperature
+       */
+      function _get_requested(city, temp) {
+        _put_req_data(`Current Temperature in ${city}: ${temp} degree`)
+      }
+
+
+      function _generic_success(response) {
+        _get_requested(response['city'], response['temp'])
+      }
+
+      function _proxy401() {
+        console.error("Cannot access proxy, it's down or the request is blocked.")
+        _put_req_data("Kesahalan Proxy: 401 - Kemungkinan? Proxy sedang down!")
+      }
+
+      function toProxy(url) {
+        return "https://rimueirnarn-httpsproxy.glitch.me/?url=" + encodeURIComponent(url)
+      }
+
+      function beforeSend(request) {
+        request.setRequestHeader("Access-Control-Allow-Origin", "https://rimueirnarn-httpsproxy.glitch.me/")
+        request.setRequestHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        request.setRequestHeader("Access-Control-Allow-Headers", "*")
+      }
+
+      function seoul_weather() {
+        $.ajax({
+          method: "GET",
+          url: toProxy('http://spartacodingclub.shop/sparta_api/weather/seoul'),
+          beforeSend: beforeSend,
+          success: _generic_success,
+          statusCode: {
+                401: _proxy401
+          }
+        })
+      }
+
+      function tokyo_weather() {
+        $.ajax({
+          method: "GET",
+          url: toProxy('http://spartacodingclub.shop/sparta_api/weather/tokyo'),
+          beforeSend: beforeSend,
+          statusCode: {
+            500: () => {
+              console.error("Failed fetching /tokyo. Error code is 500.")
+              seoul_weather()
+            },
+            401: _proxy401
+          },
+          success: () => {
+            // force error ourself by saying unexpected thing. This is required as per task mission, "Seoul".
+            console.error("Failed fetching /tokyo. Response cannot be reached.")
+            seoul_weather()
+          }
+        })
+      }
+
+      function hinamizawa_weather() {
+      try {
+        $.ajax({
+          method: "GET",
+          url: toProxy('http://spartacodingclub.shop/sparta_api/weather/hinamizawa'),
+          beforeSend: beforeSend,
+          statusCode: {
+            500: () => {
+              console.error("Failed fetching /hinamizawa. Error code is 500.")
+              tokyo_weather()
+            },
+            401: _proxy401
+          },
+          success: _generic_success
+        })
+      } catch(error) {
+          _proxy401()
+          console.error(error)
+          
+        }
+      }
+
+      function validate() {
+        const ERR_NICKNAME = "Nickname must not be empty!"
+        const ERR_MESSAGE = "Message must not be empty!"
+        let invNick = $("#invalid-nickname")
+        let invMes = $("#invalid-message")
+        let nickname = $("#nickname").val()
+        let message = $("#message").val()
+        let err = 0
+        if (nickname == "") {
+          invNick.text(ERR_NICKNAME)
+          invNick.show()
+          err++
+        }
+        if (message == "") {
+          invMes.text(ERR_MESSAGE)
+          invMes.show()
+          err++
+        }
+
+        if (err != 0) {
+          throw new Error("Validation failed")
+        }
+        invMes.hide()
+        invNick.hide()
+        return { nickname, message }
+      }
+
+      function push_data() {
+        $.ajax({
+          method: "POST",
+          url: "/homework",
+          data: validate(),
+          success: (response) => {
+            console.log(`${response['status']} -> ${response['message']}`)
+            data = validate()
+            push(data.nickname, data.message) // Seamless load
+          }
+        })
+      }
+
+      function push(nickname, message) {
+        let sanitized_name = sanitizeHTML(nickname)
+        let sanitized_message = sanitizeHTML(message)
+        $("#posts").append(`
+        <div class="card">
+          <div class="card-body">
+            <blockquote class="blockquote mb-0">
+              <p>${sanitized_message}</p>
+              <footer class="blockquote-footer">${sanitized_name}</footer>
+            </blockquote>
+          </div>
+        </div>
+        `)
+      }
+
+      function read_all() {
+        $.ajax({
+          method: "GET",
+          url: "/homework",
+          success: (response) => {
+            console.log(`${response['status']} -> ${response['message']}`)
+            for (const data of response['response']) {
+              push(data.nickname, data.message)
+            }
+          }
+        })
+      }
+
+      function sleep(seconds) {
+        new Promise(resolve => setTimeout(resolve, seconds * 1000)).then(() => {
+          return seconds
+        })
+      }
+
+      $(document).ready(() => {
+        // invoke weather request.
+        hinamizawa_weather()
+        $("#invalid-nickname").hide()
+        $("#invalid-message").hide()
+        //console.clear()
+        console.log("Document loaded succesfully.")
+        read_all()
+      })
+    </script>
+
+    <style>
+      /* Tak disarankan? */
+      * {
+        font-family: 'Gowun Dodum', sans-serif;
+      }
+
+
+      .banner {
+        width: 100%;
+        height: 300px;
+
+        /*background-image: url('https://shirouemiya3.pythonanywhere.com/media/images/lx-media001.jpg');*/
+        background-image: linear-gradient(0deg, rgba(0, 0, 0, 0.5), rgba(0, 0, 0, 0.5)), url('https://shirouemiya3.pythonanywhere.com/media/images/lx-media001.jpg');
+        background-position: center;
+        background-size: cover;
+        color: white;
+
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+      }
+      
+      .info-error {
+        align-self: flex-start;
+  left: 0; /* new */
+  top: 0; /* new */
+  position: absolute; /* new */
+  margin: 4px;
+  margin-left: 8px;
+      }
+
+      .post {
+        width: 95%;
+        max-width: 500px;
+
+        margin: 20px auto 20px auto;
+        padding: 20px;
+
+        box-shadow: 0px 0px 3px 0px black;
+      }
+
+      .post>button {
+        margin-top: 15px;
+      }
+
+      .posts {
+        width: 95%;
+        max-width: 500px;
+
+        margin: auto;
+      }
+
+      .posts>.card {
+        margin-top: 10px;
+        margin-bottom: 10px;
+      }
+      
+      .hovered:hover {
+        text-decoration: underline;
+      }
+      
+      .hovered {
+      text-decoration: none;
+      }
+    </style>
+  </head>
+
+  <body>
+    <div class="banner">
+      <div class='info-error'>
+        <p><i class="bi bi-exclamation-circle"></i> Jika informasi cuaca tidak ter-load atau bertuliskan "[object Object]", hubungi <strong><a class="text-reset hovered" href="https://github.com/RimuEirnarn">@RimuEirnarn</a></strong></p>
+      </div>
+      <h1>Higurashi Fan Book</h1>
+      <p id="weather">[object Object]</p>
+    </div>
+
+    <div class="post">
+      <div class="form-floating mb-3">
+        <div class="form-floating mb-3">
+          <input type="text" class="form-control" id="nickname" placeholder="Nickname">
+          <label for="nickname">Nickname</label>
+        </div>
+        <p class="text-danger" id="invalid-nickname"></p>
+
+        <div class="form-floating">
+          <textarea class="form-control" id="message" placeholder="Fan Message"></textarea>
+          <label for="message">Fan Message</label>
+        </div>
+        <p class="text-danger" id="invalid-message"></p>
+
+      </div>
+      <button type="button" class="btn btn-dark" onclick='push_data()'>Submit</button>
+    </div>
+
+    <div class="posts" id='posts'>
+      <!--
+      <div class="card">
+        <div class="card-body">
+          <blockquote class="blockquote mb-0">
+            <p>Will there be any update of Higurashi Meguri?</p>
+            <footer class="blockquote-footer">Rika98210</footer>
+          </blockquote>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-body">
+          <blockquote class="blockquote mb-0">
+            <p>HIGUUUUUUU</p>
+            <footer class="blockquote-footer">Keibara55410</footer>
+          </blockquote>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-body">
+          <blockquote class="blockquote mb-0">
+            <p>Can i go to Hinamizawa?</p>
+            <footer class="blockquote-footer">SatoRika12045</footer>
+          </blockquote>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-body">
+          <blockquote class="blockquote mb-0">
+            <p>Escape</p>
+            <footer class="blockquote-footer">Reina666</footer>
+          </blockquote>
+        </div>
+      </div>
+    -->
+    </div>
+  </body>
+
+</html>
+
