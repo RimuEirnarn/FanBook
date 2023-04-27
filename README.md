@@ -1,3 +1,3 @@
-# 
+# Fan Book
 
-RimuEirnarn's implementation of 
+RimuEirnarn's implementation of Fan Book
