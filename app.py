@@ -16,6 +16,10 @@ app = Flask(__name__)
 
 # Membenarkan: Kerusakan mixed content policy dengan membolehkan sebagian dari SpartaAPI
 
+def validate(mes, nick):
+    if len(mes) >= 512 or len(nick) >= 512:
+        return 400, "Either message or nickname exceed the limit"
+    return None, None
 
 def allow_sparta_api(response: Response):
     response.headers["Content-Security-Policy-Report-Only"] = "default-src https: 'unsafe-inline' 'unsafe-eval' http:;"
@@ -34,6 +38,9 @@ def home():
 def homework_post():
     message = request.form['message']
     nickname = request.form['nickname']
+    c, r = validate(mes, nick)
+    if c:
+        return r, c
     fanbook.insert_one({
         "message": message,
         "nickname": nickname

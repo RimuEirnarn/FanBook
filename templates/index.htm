@@ -123,11 +123,17 @@
       function validate() {
         const ERR_NICKNAME = "Nickname must not be empty!"
         const ERR_MESSAGE = "Message must not be empty!"
+        const ERR_LENGTH = "Message or Nickname must not be more than 512 characters!"
         let invNick = $("#invalid-nickname")
         let invMes = $("#invalid-message")
         let nickname = $("#nickname").val()
         let message = $("#message").val()
         let err = 0
+        if ((nickname.length >= 512) || (message.length >= 512))) {
+          invNick.text(ERR_LENGTH)
+          invNick.show()
+          err++
+        }
         if (nickname == "") {
           invNick.text(ERR_NICKNAME)
           invNick.show()
